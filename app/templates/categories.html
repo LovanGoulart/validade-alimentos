@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Categorias - ValiFood{% endblock %}
+
+{% block content %}
+<div class="categories-page">
+    <div class="page-header">
+        <h2>📂 Categorias</h2>
+    </div>
+
+    <form method="POST" action="{{ url_for('categories.new_category') }}" class="category-form">
+        <div class="form-row">
+            <div class="form-group">
+                <input type="text" name="name" placeholder="Nova categoria" required>
+            </div>
+            <div class="form-group">
+                <input type="text" name="icon" placeholder="Ícone (emoji)" value="📦" maxlength="5">
+            </div>
+            <div class="form-group">
+                <input type="color" name="color" value="#6366f1">
+            </div>
+            <button type="submit" class="btn btn-primary">➕</button>
+        </div>
+    </form>
+
+    <div class="category-list">
+        {% for cat in categories %}
+        <div class="category-item">
+            <div class="category-info">
+                <span class="category-icon-large" style="color: {{ cat.color }}">{{ cat.icon }}</span>
+                <div>
+                    <h4>{{ cat.name }}</h4>
+                    <span class="category-count">{{ cat.products.count() }} produtos</span>
+                </div>
+            </div>
+            {% if cat.user_id == current_user.id %}
+            <div class="category-actions">
+                <button type="button" class="btn btn-ghost btn-sm" 
+                        onclick="toggleEdit({{ cat.id }})">✏️</button>
+                <form method="POST" action="{{ url_for('categories.delete_category', id=cat.id) }}" 
+                      class="inline-form" onsubmit="return confirm('Excluir esta categoria?');">
+                    <button type="submit" class="btn btn-ghost btn-sm">🗑️</button>
+                </form>
+            </div>
+
+            <form method="POST" action="{{ url_for('categories.edit_category', id=cat.id) }}" 
+                  class="category-edit-form" id="edit-form-{{ cat.id }}" style="display:none;">
+                <div class="form-row">
+                    <input type="text" name="name" value="{{ cat.name }}" required>
+                    <input type="text" name="icon" value="{{ cat.icon }}" maxlength="5">
+                    <input type="color" name="color" value="{{ cat.color }}">
+                    <button type="submit" class="btn btn-primary btn-sm">💾</button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function toggleEdit(id) {
+    const form = document.getElementById('edit-form-' + id);
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+</script>
+{% endblock %}

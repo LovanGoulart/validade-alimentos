@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Produtos - ValiFood{% endblock %}
+
+{% block content %}
+<div class="products-page">
+    <div class="page-header">
+        <h2>📦 Meus Alimentos</h2>
+    </div>
+
+    <div class="search-bar">
+        <input type="text" id="search-input" placeholder="🔎 Procurar alimento..." 
+               value="{{ search }}" autocomplete="off">
+    </div>
+
+    <div class="filter-chips">
+        <a href="{{ url_for('products.list_products') }}" class="chip {% if filter_status == 'todos' %}active{% endif %}">Todos</a>
+        <a href="{{ url_for('products.list_products', status='vencido') }}" class="chip {% if filter_status == 'vencido' %}active{% endif %}">Vencidos</a>
+        <a href="{{ url_for('products.list_products', status='vence_hoje') }}" class="chip {% if filter_status == 'vence_hoje' %}active{% endif %}">Hoje</a>
+        <a href="{{ url_for('products.list_products', status='atencao') }}" class="chip {% if filter_status == 'atencao' %}active{% endif %}">7 dias</a>
+        <a href="{{ url_for('products.list_products', status='proximo') }}" class="chip {% if filter_status == 'proximo' %}active{% endif %}">30 dias</a>
+        <a href="{{ url_for('products.list_products', status='sem_validade') }}" class="chip {% if filter_status == 'sem_validade' %}active{% endif %}">Sem validade</a>
+    </div>
+
+    <div class="product-list" id="product-list">
+        {% for p in products %}
+        <a href="{{ url_for('products.detail', id=p.id) }}" class="product-card product-{{ p.get_status() }}">
+            <div class="product-icon">{{ p.category.icon if p.category else '📦' }}</div>
+            <div class="product-info">
+                <h4 class="product-name">{{ p.name }}</h4>
+                <p class="product-brand">{{ p.brand or '' }}</p>
+                <p class="product-meta">
+                    {% if p.no_expiration or not p.expiration_date %}
+                        <span class="badge badge-neutral">📅 Sem validade</span>
+                    {% elif p.get_status() == 'vencido' %}
+                        <span class="badge badge-danger">❌ Vencido há {{ p.get_days_remaining()|abs }} dias</span>
+                    {% elif p.get_status() == 'vence_hoje' %}
+                        <span class="badge badge-warning">⚠️ Vence hoje</span>
+                    {% elif p.get_status() == 'urgente' %}
+                        <span class="badge badge-urgent">🔴 Vence em {{ p.get_days_remaining() }} dias</span>
+                    {% elif p.get_status() == 'atencao' %}
+                        <span class="badge badge-attention">🟡 Vence em {{ p.get_days_remaining() }} dias</span>
+                    {% elif p.get_status() == 'proximo' %}
+                        <span class="badge badge-info">🔵 Vence em {{ p.get_days_remaining() }} dias</span>
+                    {% else %}
+                        <span class="badge badge-success">✓ Vence em {{ p.get_days_remaining() }} dias</span>
+                    {% endif %}
+                </p>
+                <p class="product-location">📍 {{ p.location.name if p.location else 'Sem local' }}</p>
+            </div>
+            <div class="product-qty">
+                <span class="qty-value">{{ p.quantity|int }}</span>
+                <span class="qty-unit">{{ p.unit }}</span>
+            </div>
+        </a>
+        {% else %}
+        <div class="empty-state">
+            <span class="empty-icon">📭</span>
+            <p>Nenhum produto encontrado</p>
+            <a href="{{ url_for('products.new_product') }}" class="btn btn-primary">Adicionar primeiro alimento</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/products.js') }}"></script>
+{% endblock %}

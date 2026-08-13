@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#10b981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="ValiFood - Controle inteligente de alimentos e validade">
+
+    <title>{% block title %}ValiFood{% endblock %}</title>
+
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192x192.png') }}">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="toast-container" id="toast-container">
+                {% for category, message in messages %}
+                    <div class="toast toast-{{ category }}" role="alert" aria-live="polite">
+                        <span class="toast-icon">
+                            {% if category == 'success' %}✓{% elif category == 'danger' %}✕{% elif category == 'warning' %}⚠{% else %}ℹ{% endif %}
+                        </span>
+                        <span class="toast-message">{{ message }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <div class="app-container">
+        {% if current_user.is_authenticated %}
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">ValiFood</h1>
+                <span class="app-subtitle">Controle de validade</span>
+            </div>
+        </header>
+        {% endif %}
+
+        <main class="app-main">
+            {% block content %}{% endblock %}
+        </main>
+
+        {% if current_user.is_authenticated %}
+        <nav class="bottom-nav" aria-label="Navegação principal">
+            <a href="{{ url_for('dashboard.index') }}" class="nav-item {% if request.endpoint == 'dashboard.index' %}active{% endif %}" aria-label="Início">
+                <span class="nav-icon">🏠</span>
+                <span class="nav-label">Início</span>
+            </a>
+            <a href="{{ url_for('products.list_products') }}" class="nav-item {% if request.endpoint and 'products' in request.endpoint %}active{% endif %}" aria-label="Produtos">
+                <span class="nav-icon">📦</span>
+                <span class="nav-label">Produtos</span>
+            </a>
+            <a href="{{ url_for('products.new_product') }}" class="nav-item nav-scan {% if request.endpoint and 'new_product' in request.endpoint %}active{% endif %}" aria-label="Escanear">
+                <span class="nav-icon">📷</span>
+                <span class="nav-label">Scan</span>
+            </a>
+            <a href="{{ url_for('notifications.index') }}" class="nav-item {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}" aria-label="Alertas">
+                <span class="nav-icon">⚠️</span>
+                <span class="nav-label">Alertas</span>
+            </a>
+            <a href="{{ url_for('notifications.settings') }}" class="nav-item {% if request.endpoint and 'settings' in request.endpoint %}active{% endif %}" aria-label="Configurações">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-label">Config</span>
+            </a>
+        </nav>
+
+        <a href="{{ url_for('products.new_product') }}" class="fab" aria-label="Adicionar alimento">
+            <span>+</span>
+        </a>
+        {% endif %}
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script src="{{ url_for('static', filename='js/scanner-modal.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('{{ url_for("static", filename="service-worker.js") }}')
+                .then(reg => console.log('SW registrado'))
+                .catch(err => console.log('SW erro:', err));
+        }
+    </script>
+</body>
+</html>
