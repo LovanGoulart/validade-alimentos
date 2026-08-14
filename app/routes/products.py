@@ -3,9 +3,19 @@ from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 import pytz
 from app import db
-from app.models import Product, Category, History, Location
+from app.models import Product, Category, History
 
 bp = Blueprint('products', __name__)
+
+STORAGE_LOCATIONS = [
+    {'id': 'geladeira', 'name': 'Geladeira', 'icon': '🧊'},
+    {'id': 'freezer', 'name': 'Freezer', 'icon': '❄️'},
+    {'id': 'despensa', 'name': 'Despensa', 'icon': '🏠'},
+    {'id': 'armario', 'name': 'Armário', 'icon': '🚪'},
+    {'id': 'cozinha', 'name': 'Cozinha', 'icon': '🍳'},
+    {'id': 'area_servico', 'name': 'Área de Serviço', 'icon': '🧺'},
+    {'id': 'outro', 'name': 'Outro', 'icon': '📍'},
+]
 
 
 @bp.route('/produtos')
@@ -20,15 +30,12 @@ def list_products():
 
     query = Product.query.filter_by(user_id=current_user.id, active=True)
 
-    # Busca por nome
     if search:
         query = query.filter(Product.name.ilike(f'%{search}%'))
 
-    # Filtro por categoria
     if category_id:
         query = query.filter_by(category_id=category_id)
 
-    # Filtro por status de validade (CUMULATIVO)
     if status == 'vencido':
         query = query.filter(
             Product.expiration_date.isnot(None),
@@ -42,7 +49,6 @@ def list_products():
             Product.expiration_date == today
         )
     elif status == 'atencao':
-        # 0 a 7 dias (inclui hoje + próximos 7)
         date_7 = today + timedelta(days=7)
         query = query.filter(
             Product.expiration_date.isnot(None),
@@ -51,7 +57,6 @@ def list_products():
             Product.expiration_date <= date_7
         )
     elif status == 'proximo':
-        # 0 a 30 dias (inclui hoje + próximos 30)
         date_30 = today + timedelta(days=30)
         query = query.filter(
             Product.expiration_date.isnot(None),
@@ -63,7 +68,6 @@ def list_products():
         query = query.filter(
             (Product.expiration_date.is_(None)) | (Product.no_expiration == True)
         )
-    # status == 'todos' → não aplica filtro de validade
 
     products = query.order_by(Product.expiration_date.asc().nullslast(), Product.name.asc()).all()
 
@@ -91,15 +95,8 @@ def detail(id):
 @bp.route('/produtos/novo/<barcode>', methods=['GET', 'POST'])
 @login_required
 def new_product(barcode=None):
-    tz = pytz.timezone('America/Sao_Paulo')
-    today = datetime.now(tz).date()
-
     categories = Category.query.filter(
         (Category.user_id == current_user.id) | (Category.user_id == None)
-    ).all()
-
-    locations = Location.query.filter(
-        (Location.user_id == current_user.id) | (Location.user_id == None)
     ).all()
 
     existing = None
@@ -112,7 +109,7 @@ def new_product(barcode=None):
                 barcode=barcode,
                 existing=existing,
                 categories=categories,
-                locations=locations
+                locations=STORAGE_LOCATIONS
             )
 
     if request.method == 'POST':
@@ -120,7 +117,6 @@ def new_product(barcode=None):
         brand = request.form.get('brand', '').strip()
         barcode_input = request.form.get('barcode', '').strip()
         category_id = request.form.get('category_id', type=int)
-        location_id = request.form.get('location_id', type=int)
         quantity = request.form.get('quantity', type=float, default=1)
         unit = request.form.get('unit', 'unidade')
         no_expiration = bool(request.form.get('no_expiration'))
@@ -142,7 +138,6 @@ def new_product(barcode=None):
             brand=brand or None,
             barcode=barcode_input or None,
             category_id=category_id or None,
-            storage_location_id=location_id or None,
             quantity=quantity,
             unit=unit,
             expiration_date=expiration_date,
@@ -152,7 +147,6 @@ def new_product(barcode=None):
         db.session.add(product)
         db.session.commit()
 
-        # Registrar no histórico
         history = History(
             user_id=current_user.id,
             product_id=product.id,
@@ -170,7 +164,7 @@ def new_product(barcode=None):
         barcode=barcode,
         existing=None,
         categories=categories,
-        locations=locations
+        locations=STORAGE_LOCATIONS
     )
 
 
@@ -183,17 +177,11 @@ def edit(id):
         (Category.user_id == current_user.id) | (Category.user_id == None)
     ).all()
 
-    locations = Location.query.filter(
-        (Location.user_id == current_user.id) | (Location.user_id == None)
-    ).all()
-
     if request.method == 'POST':
-        old_name = product.name
         product.name = request.form.get('name', '').strip()
         product.brand = request.form.get('brand', '').strip() or None
         product.barcode = request.form.get('barcode', '').strip() or None
         product.category_id = request.form.get('category_id', type=int) or None
-        product.storage_location_id = request.form.get('location_id', type=int) or None
         product.quantity = request.form.get('quantity', type=float, default=1)
         product.unit = request.form.get('unit', 'unidade')
         product.no_expiration = bool(request.form.get('no_expiration'))
@@ -229,7 +217,7 @@ def edit(id):
     return render_template('product_form.html',
         product=product,
         categories=categories,
-        locations=locations
+        locations=STORAGE_LOCATIONS
     )
 
 
