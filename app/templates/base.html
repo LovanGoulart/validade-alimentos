@@ -17,6 +17,37 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     <style>
+    
+        /* ===== FAB - Voltar ao topo ===== */
+        .fab {
+            position: fixed;
+            bottom: 90px;
+            right: 16px;
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            background: #10b981;
+            color: #fff;
+            border: none;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+            z-index: 90;
+            opacity: 0;
+            transform: translateY(16px);
+            pointer-events: none;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+        .fab.visible {
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
+
+        /* ===== Modal do Scanner ===== */
         .scanner-modal {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -143,8 +174,8 @@
                 <span class="nav-label">Config</span>
             </a>
             <a href="{{ url_for('products.new_product') }}" onclick="openScannerModal(); return false;" class="nav-item nav-scan" aria-label="Escanear">
-                <span class="nav-icon">+</span>
-                <span class="nav-label"></span>
+                <span class="nav-icon">📷</span>
+                <span class="nav-label">Scan</span>
             </a>
             <a href="{{ url_for('notifications.index') }}" class="nav-item {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}" aria-label="Alertas">
                 <span class="nav-icon">⚠️</span>
