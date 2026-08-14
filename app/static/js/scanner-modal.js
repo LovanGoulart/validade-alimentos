@@ -1,119 +1,205 @@
-// Scanner modal para leitura de código de barras
 let html5QrCode = null;
-let scannerModal = null;
-let targetInput = null;
+let isScanning = false;
+let lastScannedCode = null;
+let scanCooldown = false;
 
-function initScannerModal() {
-    // Criar modal se não existir
-    if (document.getElementById('scanner-modal')) return;
+function openScannerModal() {
+    const modal = document.getElementById('scanner-modal');
+    const resultDiv = document.getElementById('scanner-result');
+    const readerDiv = document.getElementById('scanner-reader');
+    const loadingDiv = document.getElementById('scanner-loading');
 
-    const modal = document.createElement('div');
-    modal.id = 'scanner-modal';
-    modal.className = 'scanner-modal';
-    modal.innerHTML = `
-        <div class="scanner-modal-content">
-            <div class="scanner-modal-header">
-                <h3>📷 Escanear código de barras</h3>
-                <button type="button" class="scanner-close-btn" onclick="closeScannerModal()">✕</button>
-            </div>
-            <div class="scanner-modal-body">
-                <div id="reader" style="width:100%;max-width:400px;margin:0 auto;"></div>
-                <p class="scanner-hint">Aponte a câmera para o código de barras do produto</p>
-                <div class="scanner-manual-section">
-                    <p>Ou digite manualmente:</p>
-                    <div class="scanner-manual-row">
-                        <input type="text" id="manual-barcode" placeholder="7891234567890" maxlength="20">
-                        <button type="button" class="btn btn-primary" onclick="applyManualBarcode()">OK</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    scannerModal = modal;
+    modal.style.display = 'flex';
+    resultDiv.style.display = 'none';
+    readerDiv.style.display = 'block';
+    loadingDiv.style.display = 'none';
+    lastScannedCode = null;
+    scanCooldown = false;
+
+    startScanner();
 }
 
-function openScannerModal(inputId) {
-    initScannerModal();
-    targetInput = document.getElementById(inputId);
-    scannerModal.classList.add('active');
-    document.body.style.overflow = 'hidden';
+function closeScannerModal() {
+    const modal = document.getElementById('scanner-modal');
+    modal.style.display = 'none';
+    stopScanner();
+}
 
-    const reader = document.getElementById('reader');
-    reader.innerHTML = '';
+function startScanner() {
+    if (isScanning) return;
 
-    html5QrCode = new Html5Qrcode("reader");
+    const readerDiv = document.getElementById('scanner-reader');
+    readerDiv.innerHTML = '';
 
-    const config = { 
-        fps: 10, 
-        qrbox: { width: 250, height: 150 },
-        aspectRatio: 1.0
+    html5QrCode = new Html5Qrcode("scanner-reader");
+
+    const config = {
+        fps: 10,
+        qrbox: { width: 260, height: 160 },
+        aspectRatio: 1.333
     };
 
     html5QrCode.start(
         { facingMode: "environment" },
         config,
-        (decodedText) => {
-            // Sucesso!
-            if (targetInput) {
-                targetInput.value = decodedText;
-                targetInput.dispatchEvent(new Event('input'));
-            }
-            closeScannerModal();
-            showToast('✓ Código detectado: ' + decodedText, 'success');
-        },
-        (errorMessage) => {
-            // Erros de scan são normais, ignorar
-        }
-    ).catch((err) => {
+        onScanSuccess,
+        onScanFailure
+    ).then(() => {
+        isScanning = true;
+    }).catch(err => {
         console.error("Erro ao iniciar scanner:", err);
-        showToast('⚠️ Não foi possível acessar a câmera. Use a digitação manual.', 'warning');
+        alert("Não foi possível acessar a câmera. Verifique as permissões.");
+        closeScannerModal();
     });
 }
 
-function closeScannerModal() {
-    if (html5QrCode) {
+function stopScanner() {
+    if (html5QrCode && isScanning) {
         html5QrCode.stop().then(() => {
             html5QrCode.clear();
-            html5QrCode = null;
-        }).catch(() => {
-            html5QrCode = null;
+            isScanning = false;
+        }).catch(err => {
+            console.error("Erro ao parar scanner:", err);
         });
     }
-    if (scannerModal) {
-        scannerModal.classList.remove('active');
-    }
-    document.body.style.overflow = '';
 }
 
-function applyManualBarcode() {
-    const manual = document.getElementById('manual-barcode');
-    if (manual && manual.value.trim()) {
-        if (targetInput) {
-            targetInput.value = manual.value.trim();
-            targetInput.dispatchEvent(new Event('input'));
-        }
-        closeScannerModal();
-    }
+function onScanSuccess(decodedText, decodedResult) {
+    if (scanCooldown) return;
+    if (decodedText === lastScannedCode) return;
+
+    lastScannedCode = decodedText;
+    scanCooldown = true;
+    stopScanner();
+
+    const loadingDiv = document.getElementById('scanner-loading');
+    const resultDiv = document.getElementById('scanner-result');
+    const readerDiv = document.getElementById('scanner-reader');
+    const codeSpan = document.getElementById('scanned-code');
+    const actionsDiv = document.getElementById('scanner-actions');
+
+    readerDiv.style.display = 'none';
+    loadingDiv.style.display = 'block';
+    codeSpan.textContent = decodedText;
+
+    fetch('/api/barcode/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barcode: decodedText })
+    })
+    .then(r => r.json())
+    .then(data => {
+        loadingDiv.style.display = 'none';
+        resultDiv.style.display = 'block';
+        renderActions(data, decodedText, actionsDiv);
+    })
+    .catch(err => {
+        console.error(err);
+        loadingDiv.style.display = 'none';
+        resultDiv.style.display = 'block';
+        actionsDiv.innerHTML = '<p class="error-msg">Erro ao consultar servidor.</p><button class="btn btn-primary" onclick="rescan()">Tentar de novo</button>';
+    });
 }
 
-// Fechar ao clicar fora
-document.addEventListener('click', (e) => {
-    if (e.target === scannerModal) {
-        closeScannerModal();
-    }
-});
+function onScanFailure(error) {
+    // Silencioso
+}
 
-// Toast helper
-function showToast(message, type) {
-    const container = document.getElementById('toast-container') || document.body;
-    const toast = document.createElement('div');
-    toast.className = 'toast toast-' + type;
-    toast.innerHTML = `<span class="toast-icon">${type === 'success' ? '✓' : '⚠'}</span><span class="toast-message">${message}</span>`;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transform = 'translateY(-20px)';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+function rescan() {
+    const resultDiv = document.getElementById('scanner-result');
+    resultDiv.style.display = 'none';
+    lastScannedCode = null;
+    scanCooldown = false;
+    startScanner();
+}
+
+function renderActions(data, barcode, container) {
+    container.innerHTML = '';
+    const btnGroup = document.createElement('div');
+    btnGroup.className = 'btn-group';
+    btnGroup.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
+
+    if (data.found && data.product) {
+        const p = data.product;
+        const info = document.createElement('div');
+        info.className = 'result-info';
+        info.innerHTML = `
+            <p><strong>${p.name}</strong></p>
+            <p>${Math.floor(p.quantity || 0)} ${p.unit || 'unidade'} em estoque</p>
+            <p style="font-size:0.85em;opacity:0.7;">Validade: ${p.expiration_date || 'Sem validade'}</p>
+        `;
+        container.appendChild(info);
+
+        // 1. Dar baixa (consumir 1 unidade)
+        const btnBaixa = document.createElement('button');
+        btnBaixa.className = 'btn btn-secondary';
+        btnBaixa.innerHTML = '➖ Dar baixa (1 unidade)';
+        btnBaixa.onclick = function() {
+            postForm('/produtos/consumir-por-codigo', { barcode: barcode, amount: '1' });
+        };
+        btnGroup.appendChild(btnBaixa);
+
+        // 2. Adicionar estoque
+        const btnAdd = document.createElement('button');
+        btnAdd.className = 'btn btn-primary';
+        btnAdd.innerHTML = '➕ Adicionar estoque';
+        btnAdd.onclick = function() {
+            postForm('/produtos/' + p.id + '/estoque', { amount: '1' });
+        };
+        btnGroup.appendChild(btnAdd);
+
+        // 3. Editar
+        const btnEdit = document.createElement('a');
+        btnEdit.className = 'btn btn-ghost';
+        btnEdit.href = '/produtos/' + p.id + '/editar';
+        btnEdit.textContent = '✏️ Editar produto';
+        btnGroup.appendChild(btnEdit);
+
+        // 4. Excluir
+        const btnDel = document.createElement('button');
+        btnDel.className = 'btn btn-danger';
+        btnDel.innerHTML = '🗑️ Excluir produto';
+        btnDel.onclick = function() {
+            if (confirm('Tem certeza que deseja excluir "' + p.name + '"?')) {
+                postForm('/produtos/excluir-por-codigo', { barcode: barcode });
+            }
+        };
+        btnGroup.appendChild(btnDel);
+
+    } else {
+        const info = document.createElement('div');
+        info.className = 'result-info';
+        info.innerHTML = `<p>Produto não cadastrado no sistema.</p>`;
+        container.appendChild(info);
+
+        const btnNew = document.createElement('a');
+        btnNew.className = 'btn btn-primary';
+        btnNew.href = '/produtos/novo/' + barcode;
+        btnNew.textContent = '➕ Cadastrar novo produto';
+        btnGroup.appendChild(btnNew);
+    }
+
+    // Escanear outro
+    const btnRescan = document.createElement('button');
+    btnRescan.className = 'btn btn-ghost';
+    btnRescan.textContent = '📷 Escanear outro código';
+    btnRescan.onclick = rescan;
+    btnGroup.appendChild(btnRescan);
+
+    container.appendChild(btnGroup);
+}
+
+function postForm(action, fields) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = action;
+    for (const [key, value] of Object.entries(fields)) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
 }

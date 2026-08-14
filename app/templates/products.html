@@ -57,7 +57,7 @@
         <div class="empty-state">
             <span class="empty-icon">📭</span>
             <p>Nenhum produto encontrado</p>
-            <a href="{{ url_for('products.new_product') }}" class="btn btn-primary">Adicionar primeiro alimento</a>
+            <a href="#" onclick="openScannerModal(); return false;" class="btn btn-primary">Adicionar primeiro alimento</a>
         </div>
         {% endfor %}
     </div>

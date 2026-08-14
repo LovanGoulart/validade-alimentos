@@ -3,19 +3,9 @@ from flask_login import login_required, current_user
 from datetime import datetime, timedelta
 import pytz
 from app import db
-from app.models import Product, Category, History
+from app.models import Product, Category, History, StorageLocation
 
 bp = Blueprint('products', __name__)
-
-STORAGE_LOCATIONS = [
-    {'id': 'geladeira', 'name': 'Geladeira', 'icon': '🧊'},
-    {'id': 'freezer', 'name': 'Freezer', 'icon': '❄️'},
-    {'id': 'despensa', 'name': 'Despensa', 'icon': '🏠'},
-    {'id': 'armario', 'name': 'Armário', 'icon': '🚪'},
-    {'id': 'cozinha', 'name': 'Cozinha', 'icon': '🍳'},
-    {'id': 'area_servico', 'name': 'Área de Serviço', 'icon': '🧺'},
-    {'id': 'outro', 'name': 'Outro', 'icon': '📍'},
-]
 
 
 @bp.route('/produtos')
@@ -98,6 +88,8 @@ def new_product(barcode=None):
     categories = Category.query.filter(
         (Category.user_id == current_user.id) | (Category.user_id == None)
     ).all()
+    
+    locations = StorageLocation.query.filter_by(user_id=current_user.id).all()
 
     existing = None
     if barcode:
@@ -109,7 +101,7 @@ def new_product(barcode=None):
                 barcode=barcode,
                 existing=existing,
                 categories=categories,
-                locations=STORAGE_LOCATIONS
+                locations=locations
             )
 
     if request.method == 'POST':
@@ -117,6 +109,7 @@ def new_product(barcode=None):
         brand = request.form.get('brand', '').strip()
         barcode_input = request.form.get('barcode', '').strip()
         category_id = request.form.get('category_id', type=int)
+        location_id = request.form.get('location_id', type=int)
         quantity = request.form.get('quantity', type=float, default=1)
         unit = request.form.get('unit', 'unidade')
         no_expiration = bool(request.form.get('no_expiration'))
@@ -127,9 +120,9 @@ def new_product(barcode=None):
             date_str = request.form.get('expiration_date', '')
             if date_str:
                 try:
-                    expiration_date = datetime.strptime(date_str, '%d/%m/%Y').date()
+                    expiration_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 except ValueError:
-                    flash('Data de validade inválida. Use o formato DD/MM/AAAA.', 'danger')
+                    flash('Data de validade inválida.', 'danger')
                     return redirect(url_for('products.new_product', barcode=barcode_input))
 
         product = Product(
@@ -138,6 +131,7 @@ def new_product(barcode=None):
             brand=brand or None,
             barcode=barcode_input or None,
             category_id=category_id or None,
+            storage_location_id=location_id or None,
             quantity=quantity,
             unit=unit,
             expiration_date=expiration_date,
@@ -164,7 +158,7 @@ def new_product(barcode=None):
         barcode=barcode,
         existing=None,
         categories=categories,
-        locations=STORAGE_LOCATIONS
+        locations=locations
     )
 
 
@@ -176,12 +170,15 @@ def edit(id):
     categories = Category.query.filter(
         (Category.user_id == current_user.id) | (Category.user_id == None)
     ).all()
+    
+    locations = StorageLocation.query.filter_by(user_id=current_user.id).all()
 
     if request.method == 'POST':
         product.name = request.form.get('name', '').strip()
         product.brand = request.form.get('brand', '').strip() or None
         product.barcode = request.form.get('barcode', '').strip() or None
         product.category_id = request.form.get('category_id', type=int) or None
+        product.storage_location_id = request.form.get('location_id', type=int) or None
         product.quantity = request.form.get('quantity', type=float, default=1)
         product.unit = request.form.get('unit', 'unidade')
         product.no_expiration = bool(request.form.get('no_expiration'))
@@ -191,7 +188,7 @@ def edit(id):
             date_str = request.form.get('expiration_date', '')
             if date_str:
                 try:
-                    product.expiration_date = datetime.strptime(date_str, '%d/%m/%Y').date()
+                    product.expiration_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                 except ValueError:
                     flash('Data de validade inválida.', 'danger')
                     return redirect(url_for('products.edit', id=id))
@@ -217,7 +214,7 @@ def edit(id):
     return render_template('product_form.html',
         product=product,
         categories=categories,
-        locations=STORAGE_LOCATIONS
+        locations=locations
     )
 
 
@@ -245,7 +242,7 @@ def consume(id):
         db.session.add(history)
         db.session.commit()
 
-        flash(f'Consumido {amount|int} {product.unit} de "{product.name}"', 'success')
+        flash(f'Consumido {int(amount)} {product.unit} de "{product.name}"', 'success')
     else:
         flash('Quantidade insuficiente em estoque.', 'danger')
 
@@ -275,7 +272,7 @@ def add_stock(id):
     db.session.add(history)
     db.session.commit()
 
-    flash(f'Adicionado {amount|int} {product.unit} de "{product.name}"', 'success')
+    flash(f'Adicionado {int(amount)} {product.unit} de "{product.name}"', 'success')
     return redirect(url_for('products.detail', id=id))
 
 
@@ -297,4 +294,79 @@ def delete(id):
     db.session.commit()
 
     flash(f'"{product.name}" removido com sucesso.', 'success')
+    return redirect(url_for('products.list_products'))
+
+
+@bp.route('/produtos/excluir-por-codigo', methods=['POST'])
+@login_required
+def delete_by_barcode():
+    barcode = request.form.get('barcode', '').strip()
+    if not barcode:
+        flash('Código de barras não informado.', 'warning')
+        return redirect(url_for('products.list_products'))
+
+    product = Product.query.filter_by(
+        barcode=barcode, user_id=current_user.id, active=True
+    ).first()
+
+    if not product:
+        flash('Nenhum produto ativo encontrado com este código de barras.', 'warning')
+        return redirect(url_for('products.list_products'))
+
+    history = History(
+        user_id=current_user.id,
+        product_id=product.id,
+        product_name=product.name,
+        action='excluido',
+        quantity_change=-product.quantity
+    )
+    db.session.add(history)
+
+    product.active = False
+    db.session.commit()
+
+    flash(f'"{product.name}" removido com sucesso.', 'success')
+    return redirect(url_for('products.list_products'))
+
+
+@bp.route('/produtos/consumir-por-codigo', methods=['POST'])
+@login_required
+def consume_by_barcode():
+    barcode = request.form.get('barcode', '').strip()
+    amount = request.form.get('amount', type=float, default=1)
+
+    if not barcode:
+        flash('Código de barras não informado.', 'warning')
+        return redirect(url_for('products.list_products'))
+
+    product = Product.query.filter_by(
+        barcode=barcode, user_id=current_user.id, active=True
+    ).first()
+
+    if not product:
+        flash('Nenhum produto ativo encontrado com este código de barras.', 'warning')
+        return redirect(url_for('products.list_products'))
+
+    if product.quantity >= amount:
+        product.quantity -= amount
+        if product.quantity <= 0:
+            product.active = False
+
+        db.session.commit()
+
+        history = History(
+            user_id=current_user.id,
+            product_id=product.id,
+            product_name=product.name,
+            action='consumido',
+            quantity_change=-amount,
+            notes=f'{amount} {product.unit}'
+        )
+        db.session.add(history)
+        db.session.commit()
+
+        flash(f'Baixa de {int(amount)} {product.unit} de "{product.name}" realizada!', 'success')
+    else:
+        flash('Quantidade insuficiente em estoque.', 'danger')
+
     return redirect(url_for('products.list_products'))
