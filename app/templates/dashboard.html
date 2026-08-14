@@ -3,13 +3,41 @@
 {% block title %}Início - ValiFood{% endblock %}
 
 {% block content %}
+<style>
+    .section-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        padding: 4px 0;
+    }
+    .section-toggle .toggle-arrow {
+        font-size: 0.9rem;
+        transition: transform 0.25s ease;
+        opacity: 0.7;
+    }
+    .section-toggle.open .toggle-arrow {
+        transform: rotate(180deg);
+    }
+    .history-list {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.35s ease;
+    }
+    .history-list.open {
+        max-height: 800px; /* espaço suficiente para 10 itens */
+    }
+</style>
+
 <div class="dashboard">
     <div class="dashboard-header">
         <h2>Olá, {{ current_user.name.split()[0] }}! 👋</h2>
         <p class="dashboard-date">📅 {{ now.strftime('%d/%m/%Y') }}</p>
     </div>
 
-    <div class="stats-grid">
+    <!--<div class="stats-grid">
         <a href="{{ url_for('products.list_products') }}" class="stat-card stat-total">
             <span class="stat-number">{{ total }}</span>
             <span class="stat-label">Total de produtos</span>
@@ -30,7 +58,19 @@
             <span class="stat-number">{{ vence_30 }}</span>
             <span class="stat-label">Próx. 30 dias</span>
         </a>
-    </div>
+    </div>-->
+    
+    <section class="section">
+        <h3 class="section-title">📂 Categorias</h3>
+        <div class="category-scroll">
+            {% for cat in categories %}
+            <a href="{{ url_for('products.list_products', category=cat.id) }}" class="category-chip">
+                <span class="category-icon">{{ cat.icon }}</span>
+                <span class="category-name">{{ cat.name }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
 
     {% if consuma_primeiro %}
     <section class="section">
@@ -58,22 +98,13 @@
     </section>
     {% endif %}
 
-    <section class="section">
-        <h3 class="section-title">📂 Categorias</h3>
-        <div class="category-scroll">
-            {% for cat in categories %}
-            <a href="{{ url_for('products.list_products', category=cat.id) }}" class="category-chip">
-                <span class="category-icon">{{ cat.icon }}</span>
-                <span class="category-name">{{ cat.name }}</span>
-            </a>
-            {% endfor %}
-        </div>
-    </section>
-
     {% if recent_history %}
     <section class="section">
-        <h3 class="section-title">📜 Histórico recente</h3>
-        <div class="history-list">
+        <div class="section-toggle" id="history-toggle" onclick="toggleHistory()">
+            <h3 class="section-title" style="margin:0;">📜 Histórico recente</h3>
+            <span class="toggle-arrow">▼</span>
+        </div>
+        <div class="history-list" id="history-list">
             {% for h in recent_history %}
             <div class="history-item">
                 <div class="history-icon">
@@ -102,4 +133,15 @@
     </section>
     {% endif %}
 </div>
+
+<script>
+function toggleHistory() {
+    const toggle = document.getElementById('history-toggle');
+    const list = document.getElementById('history-list');
+    if (!toggle || !list) return;
+    
+    toggle.classList.toggle('open');
+    list.classList.toggle('open');
+}
+</script>
 {% endblock %}

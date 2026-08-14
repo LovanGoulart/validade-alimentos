@@ -25,10 +25,37 @@ function closeScannerModal() {
     stopScanner();
 }
 
-function startScanner() {
-    if (isScanning) return;
+// Para e limpa a câmera — retorna Promise
+function stopScanner() {
+    return new Promise((resolve) => {
+        if (!html5QrCode || !isScanning) {
+            isScanning = false;
+            resolve();
+            return;
+        }
+        html5QrCode.stop().then(() => {
+            html5QrCode.clear();
+            isScanning = false;
+            resolve();
+        }).catch((err) => {
+            console.error("Erro ao parar scanner:", err);
+            isScanning = false;
+            resolve();
+        });
+    });
+}
 
+function startScanner() {
     const readerDiv = document.getElementById('scanner-reader');
+
+    // Se por algum motivo ainda estiver escaneando, não inicia
+    if (isScanning) {
+        console.log("Scanner já está ativo");
+        return;
+    }
+
+    // Garante que a área da câmera está visível
+    readerDiv.style.display = 'block';
     readerDiv.innerHTML = '';
 
     html5QrCode = new Html5Qrcode("scanner-reader");
@@ -46,22 +73,12 @@ function startScanner() {
         onScanFailure
     ).then(() => {
         isScanning = true;
+        console.log("Câmera iniciada");
     }).catch(err => {
         console.error("Erro ao iniciar scanner:", err);
         alert("Não foi possível acessar a câmera. Verifique as permissões.");
         closeScannerModal();
     });
-}
-
-function stopScanner() {
-    if (html5QrCode && isScanning) {
-        html5QrCode.stop().then(() => {
-            html5QrCode.clear();
-            isScanning = false;
-        }).catch(err => {
-            console.error("Erro ao parar scanner:", err);
-        });
-    }
 }
 
 function onScanSuccess(decodedText, decodedResult) {
@@ -70,7 +87,6 @@ function onScanSuccess(decodedText, decodedResult) {
 
     lastScannedCode = decodedText;
     scanCooldown = true;
-    stopScanner();
 
     const loadingDiv = document.getElementById('scanner-loading');
     const resultDiv = document.getElementById('scanner-result');
@@ -82,27 +98,30 @@ function onScanSuccess(decodedText, decodedResult) {
     loadingDiv.style.display = 'block';
     codeSpan.textContent = decodedText;
 
-    fetch('/api/barcode/lookup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode: decodedText })
-    })
-    .then(r => r.json())
-    .then(data => {
-        loadingDiv.style.display = 'none';
-        resultDiv.style.display = 'block';
-        renderActions(data, decodedText, actionsDiv);
-    })
-    .catch(err => {
-        console.error(err);
-        loadingDiv.style.display = 'none';
-        resultDiv.style.display = 'block';
-        actionsDiv.innerHTML = '<p class="error-msg">Erro ao consultar servidor.</p><button class="btn btn-primary" onclick="rescan()">Tentar de novo</button>';
+    // Para a câmera primeiro, depois consulta o servidor
+    stopScanner().then(() => {
+        fetch('/api/barcode/lookup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ barcode: decodedText })
+        })
+        .then(r => r.json())
+        .then(data => {
+            loadingDiv.style.display = 'none';
+            resultDiv.style.display = 'block';
+            renderActions(data, decodedText, actionsDiv);
+        })
+        .catch(err => {
+            console.error(err);
+            loadingDiv.style.display = 'none';
+            resultDiv.style.display = 'block';
+            actionsDiv.innerHTML = '<p class="error-msg">Erro ao consultar servidor.</p><button class="btn btn-primary" onclick="rescan()">Tentar de novo</button>';
+        });
     });
 }
 
 function onScanFailure(error) {
-    // Silencioso
+    // Silencioso — scanner contínuo
 }
 
 function rescan() {
@@ -110,7 +129,11 @@ function rescan() {
     resultDiv.style.display = 'none';
     lastScannedCode = null;
     scanCooldown = false;
-    startScanner();
+
+    // Aguarda parar completamente antes de reabrir
+    stopScanner().then(() => {
+        startScanner();
+    });
 }
 
 function renderActions(data, barcode, container) {
@@ -142,7 +165,7 @@ function renderActions(data, barcode, container) {
         // 2. Adicionar estoque
         const btnAdd = document.createElement('button');
         btnAdd.className = 'btn btn-primary';
-        btnAdd.innerHTML = '➕ Adicionar estoque';
+        btnAdd.innerHTML = '➕ Adicionar (1 unidade)';
         btnAdd.onclick = function() {
             postForm('/produtos/' + p.id + '/estoque', { amount: '1' });
         };

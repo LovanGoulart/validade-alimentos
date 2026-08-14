@@ -17,34 +17,36 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
     <style>
-    
-        /* ===== FAB - Voltar ao topo ===== */
-        .fab {
+        /* ===== Botão Voltar ao Topo ===== */
+        .btn-scroll-top {
             position: fixed;
-            bottom: 90px;
-            right: 16px;
-            width: 52px;
-            height: 52px;
+            bottom: 100px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             background: #10b981;
-            color: #fff;
-            border: none;
-            font-size: 1.3rem;
+            color: #ffffff;
+            border: 2px solid #ffffff;
+            font-size: 20px;
+            line-height: 1;
             display: flex;
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
-            z-index: 90;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            z-index: 9999;
             opacity: 0;
-            transform: translateY(16px);
-            pointer-events: none;
-            transition: opacity 0.25s ease, transform 0.25s ease;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            padding: 0;
+            margin: 0;
         }
-        .fab.visible {
+        .btn-scroll-top.show {
             opacity: 1;
+            visibility: visible;
             transform: translateY(0);
-            pointer-events: auto;
         }
 
         /* ===== Modal do Scanner ===== */
@@ -63,7 +65,7 @@
         }
         .scanner-content {
             position: relative;
-            background: var(--card-bg, #1f2937);
+            background: #1f2937;
             border-radius: 16px;
             width: 92%;
             max-width: 420px;
@@ -76,12 +78,23 @@
             align-items: center;
             padding: 16px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
+            background: #111827;
+            color: #ffffff;
         }
-        .scanner-header h3 { margin: 0; font-size: 1.1rem; }
+        .scanner-header h3 { 
+            margin: 0; 
+            font-size: 1.1rem; 
+            color: #ffffff;
+        }
+        .scanner-subtitle {
+            margin: 4px 0 0 0;
+            font-size: 0.8rem;
+            color: #9ca3af;
+        }
         .scanner-close {
             background: none;
             border: none;
-            color: inherit;
+            color: #ffffff;
             font-size: 1.3rem;
             cursor: pointer;
         }
@@ -101,7 +114,7 @@
             display: inline-block;
             width: 32px; height: 32px;
             border: 3px solid rgba(255,255,255,0.2);
-            border-top-color: var(--primary, #10b981);
+            border-top-color: #10b981;
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -111,24 +124,61 @@
             font-weight: 600;
             margin-bottom: 16px;
             word-break: break-all;
+            color: #ffffff;
         }
         .result-info {
             margin-bottom: 16px;
             padding: 12px;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255,255,255,0.08);
             border-radius: 8px;
+            color: #e5e7eb;
         }
         .result-info p { margin: 4px 0; }
-        .scanner-actions .btn-group {
+
+        /* ===== BOTÕES DO MODAL - FORÇAR VISIBILIDADE ===== */
+        .scanner-content .btn-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 10px;
         }
-        .scanner-actions .btn {
-            width: 100%;
+        .scanner-content .btn,
+        .scanner-content a.btn {
+            display: flex;
+            align-items: center;
             justify-content: center;
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            text-decoration: none;
+            color: #ffffff !important;
+            transition: opacity 0.2s;
         }
-        .error-msg { color: #ef4444; margin-bottom: 12px; }
+        .scanner-content .btn-primary {
+            background: #10b981;
+        }
+        .scanner-content .btn-secondary {
+            background: #4b5563;
+        }
+        .scanner-content .btn-danger {
+            background: #ef4444;
+        }
+        .scanner-content .btn-ghost {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.25) !important;
+            color: #ffffff !important;
+        }
+        .scanner-content a.btn-ghost {
+            color: #ffffff !important;
+        }
+        .error-msg { 
+            color: #ef4444; 
+            margin-bottom: 12px; 
+            font-weight: 500;
+        }
     </style>
 
     {% block extra_css %}{% endblock %}
@@ -173,7 +223,7 @@
                 <span class="nav-icon">⚙️</span>
                 <span class="nav-label">Config</span>
             </a>
-            <a href="{{ url_for('products.new_product') }}" onclick="openScannerModal(); return false;" class="nav-item nav-scan" aria-label="Escanear">
+            <a href="#" onclick="openScannerModal(); return false;" class="nav-item nav-scan" aria-label="Escanear">
                 <span class="nav-icon">📷</span>
                 <span class="nav-label">Scan</span>
             </a>
@@ -187,17 +237,22 @@
             </a>
         </nav>
 
-        <button type="button" class="fab" id="fab-scroll-top" aria-label="Voltar ao topo">
-            <span>▲</span>
+        <!-- Botão Voltar ao Topo -->
+        <button type="button" class="btn-scroll-top" id="btn-scroll-top" aria-label="Voltar ao topo">
+            ▲
         </button>
         {% endif %}
     </div>
 
+    <!-- Modal do Scanner -->
     <div id="scanner-modal" class="scanner-modal" style="display:none;">
         <div class="scanner-overlay" onclick="closeScannerModal()"></div>
         <div class="scanner-content">
             <div class="scanner-header">
-                <h3 id="scanner-title">📷 Escanear código de barras</h3>
+                <div>
+                    <h3 id="scanner-title">📷 Scanear código de barras</h3>
+                    <p class="scanner-subtitle">Posicione o código dentro da área abaixo</p>
+                </div>
                 <button type="button" class="scanner-close" onclick="closeScannerModal()">✕</button>
             </div>
             <div id="scanner-reader" class="scanner-reader"></div>
@@ -225,19 +280,20 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            const fabScrollTop = document.getElementById('fab-scroll-top');
-            if (fabScrollTop) {
-                window.addEventListener('scroll', function() {
-                    if (window.scrollY > 200) {
-                        fabScrollTop.classList.add('visible');
-                    } else {
-                        fabScrollTop.classList.remove('visible');
-                    }
-                });
-                fabScrollTop.addEventListener('click', function() {
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                });
-            }
+            const btnTop = document.getElementById('btn-scroll-top');
+            if (!btnTop) return;
+
+            window.addEventListener('scroll', function() {
+                if (window.scrollY > 150) {
+                    btnTop.classList.add('show');
+                } else {
+                    btnTop.classList.remove('show');
+                }
+            });
+
+            btnTop.addEventListener('click', function() {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
         });
     </script>
 </body>

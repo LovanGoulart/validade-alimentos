@@ -25,27 +25,27 @@
         <form method="POST" action="{{ url_for('notifications.settings') }}" class="settings-form">
             <label class="settings-checkbox">
                 <input type="checkbox" name="alert_day_of" {% if current_user.alert_day_of %}checked{% endif %}>
-                <span>☐ No dia do vencimento</span>
+                <span> No dia do vencimento</span>
             </label>
             <label class="settings-checkbox">
                 <input type="checkbox" name="alert_1_day" {% if current_user.alert_1_day %}checked{% endif %}>
-                <span>☐ 1 dia antes</span>
+                <span> 1 dia antes</span>
             </label>
             <label class="settings-checkbox">
                 <input type="checkbox" name="alert_3_days" {% if current_user.alert_3_days %}checked{% endif %}>
-                <span>☐ 3 dias antes</span>
+                <span> 3 dias antes</span>
             </label>
             <label class="settings-checkbox">
                 <input type="checkbox" name="alert_7_days" {% if current_user.alert_7_days %}checked{% endif %}>
-                <span>☐ 7 dias antes</span>
+                <span> 7 dias antes</span>
             </label>
             <label class="settings-checkbox">
                 <input type="checkbox" name="alert_14_days" {% if current_user.alert_14_days %}checked{% endif %}>
-                <span>☐ 14 dias antes</span>
+                <span> 14 dias antes</span>
             </label>
             <label class="settings-checkbox">
                 <input type="checkbox" name="alert_30_days" {% if current_user.alert_30_days %}checked{% endif %}>
-                <span>☐ 30 dias antes</span>
+                <span> 30 dias antes</span>
             </label>
             <button type="submit" class="btn btn-primary">💾 Salvar preferências</button>
         </form>
