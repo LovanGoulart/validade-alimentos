@@ -1,202 +1,216 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 from app import db
-from app.models import Product, Category, StorageLocation, History
+from app.models import Product, Category, History, Location
 
-bp = Blueprint('products', __name__, url_prefix='/products')
+bp = Blueprint('products', __name__)
 
-@bp.route('/')
+
+@bp.route('/produtos')
 @login_required
 def list_products():
-    filter_status = request.args.get('status', 'todos')
-    category_id = request.args.get('category', type=int)
-    search = request.args.get('q', '').strip()
-
-    query = Product.query.filter_by(user_id=current_user.id, active=True)
-
-    if category_id:
-        query = query.filter_by(category_id=category_id)
-
-    if search:
-        query = query.filter(
-            db.or_(
-                Product.name.ilike(f'%{search}%'),
-                Product.brand.ilike(f'%{search}%'),
-                Product.barcode.ilike(f'%{search}%')
-            )
-        )
-
-    products = query.all()
     tz = pytz.timezone('America/Sao_Paulo')
     today = datetime.now(tz).date()
 
-    # Ordenação inteligente
-    def sort_key(p):
-        if p.no_expiration or not p.expiration_date:
-            return (5, datetime.max.date())
-        days = (p.expiration_date - today).days
-        if days < 0:
-            return (0, p.expiration_date)
-        elif days == 0:
-            return (1, p.expiration_date)
-        elif days <= 3:
-            return (2, p.expiration_date)
-        elif days <= 7:
-            return (3, p.expiration_date)
-        elif days <= 30:
-            return (4, p.expiration_date)
-        else:
-            return (5, p.expiration_date)
+    status = request.args.get('status', 'todos')
+    search = request.args.get('search', '')
+    category_id = request.args.get('category', type=int)
 
-    products.sort(key=sort_key)
+    query = Product.query.filter_by(user_id=current_user.id, active=True)
 
-    if filter_status != 'todos':
-        products = [p for p in products if p.get_status() == filter_status]
+    # Busca por nome
+    if search:
+        query = query.filter(Product.name.ilike(f'%{search}%'))
+
+    # Filtro por categoria
+    if category_id:
+        query = query.filter_by(category_id=category_id)
+
+    # Filtro por status de validade (CUMULATIVO)
+    if status == 'vencido':
+        query = query.filter(
+            Product.expiration_date.isnot(None),
+            Product.no_expiration == False,
+            Product.expiration_date < today
+        )
+    elif status == 'vence_hoje':
+        query = query.filter(
+            Product.expiration_date.isnot(None),
+            Product.no_expiration == False,
+            Product.expiration_date == today
+        )
+    elif status == 'atencao':
+        # 0 a 7 dias (inclui hoje + próximos 7)
+        date_7 = today + timedelta(days=7)
+        query = query.filter(
+            Product.expiration_date.isnot(None),
+            Product.no_expiration == False,
+            Product.expiration_date >= today,
+            Product.expiration_date <= date_7
+        )
+    elif status == 'proximo':
+        # 0 a 30 dias (inclui hoje + próximos 30)
+        date_30 = today + timedelta(days=30)
+        query = query.filter(
+            Product.expiration_date.isnot(None),
+            Product.no_expiration == False,
+            Product.expiration_date >= today,
+            Product.expiration_date <= date_30
+        )
+    elif status == 'sem_validade':
+        query = query.filter(
+            (Product.expiration_date.is_(None)) | (Product.no_expiration == True)
+        )
+    # status == 'todos' → não aplica filtro de validade
+
+    products = query.order_by(Product.expiration_date.asc().nullslast(), Product.name.asc()).all()
 
     categories = Category.query.filter(
         (Category.user_id == current_user.id) | (Category.user_id == None)
     ).all()
-    locations = StorageLocation.query.filter_by(user_id=current_user.id).all()
 
-    return render_template('products.html', 
-        products=products, 
+    return render_template('products.html',
+        products=products,
         categories=categories,
-        locations=locations,
-        filter_status=filter_status,
+        filter_status=status,
         search=search
     )
 
-@bp.route('/new', methods=['GET', 'POST'])
-@bp.route('/new/<barcode>', methods=['GET', 'POST'])
+
+@bp.route('/produtos/<int:id>')
+@login_required
+def detail(id):
+    product = Product.query.filter_by(id=id, user_id=current_user.id).first_or_404()
+    history = History.query.filter_by(product_id=id).order_by(History.created_at.desc()).all()
+    return render_template('product_detail.html', product=product, history=history)
+
+
+@bp.route('/produtos/novo', methods=['GET', 'POST'])
+@bp.route('/produtos/novo/<barcode>', methods=['GET', 'POST'])
 @login_required
 def new_product(barcode=None):
     tz = pytz.timezone('America/Sao_Paulo')
+    today = datetime.now(tz).date()
+
+    categories = Category.query.filter(
+        (Category.user_id == current_user.id) | (Category.user_id == None)
+    ).all()
+
+    locations = Location.query.filter(
+        (Location.user_id == current_user.id) | (Location.user_id == None)
+    ).all()
+
+    existing = None
+    if barcode:
+        existing = Product.query.filter_by(
+            barcode=barcode, user_id=current_user.id
+        ).first()
+        if existing:
+            return render_template('product_form.html',
+                barcode=barcode,
+                existing=existing,
+                categories=categories,
+                locations=locations
+            )
 
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
-        if not name:
-            flash('O nome do produto é obrigatório.', 'warning')
-            return redirect(request.referrer or url_for('products.new_product'))
-
-        barcode_input = request.form.get('barcode', '').strip()
         brand = request.form.get('brand', '').strip()
+        barcode_input = request.form.get('barcode', '').strip()
         category_id = request.form.get('category_id', type=int)
-        quantity = request.form.get('quantity', '1')
-        unit = request.form.get('unit', 'unidade')
-        expiration_str = request.form.get('expiration_date', '').strip()
-        no_expiration = request.form.get('no_expiration') == 'on'
         location_id = request.form.get('location_id', type=int)
+        quantity = request.form.get('quantity', type=float, default=1)
+        unit = request.form.get('unit', 'unidade')
+        no_expiration = bool(request.form.get('no_expiration'))
         notes = request.form.get('notes', '').strip()
 
-        try:
-            quantity = float(quantity.replace(',', '.'))
-        except:
-            quantity = 1
-
         expiration_date = None
-        if not no_expiration and expiration_str:
-            try:
-                expiration_date = datetime.strptime(expiration_str, '%d/%m/%Y').date()
-                today = datetime.now(tz).date()
-                if expiration_date < today:
-                    if request.form.get('confirm_past') != '1':
-                        flash('A data de validade já passou. Confirme para cadastrar.', 'warning')
-                        return redirect(request.referrer or url_for('products.new_product'))
-            except ValueError:
-                flash('Data de validade inválida. Use o formato DD/MM/AAAA.', 'warning')
-                return redirect(request.referrer or url_for('products.new_product'))
+        if not no_expiration:
+            date_str = request.form.get('expiration_date', '')
+            if date_str:
+                try:
+                    expiration_date = datetime.strptime(date_str, '%d/%m/%Y').date()
+                except ValueError:
+                    flash('Data de validade inválida. Use o formato DD/MM/AAAA.', 'danger')
+                    return redirect(url_for('products.new_product', barcode=barcode_input))
 
         product = Product(
             user_id=current_user.id,
-            barcode=barcode_input or None,
             name=name,
             brand=brand or None,
-            category_id=category_id,
+            barcode=barcode_input or None,
+            category_id=category_id or None,
+            storage_location_id=location_id or None,
             quantity=quantity,
             unit=unit,
             expiration_date=expiration_date,
             no_expiration=no_expiration,
-            storage_location_id=location_id,
-            notes=notes or None,
+            notes=notes or None
         )
         db.session.add(product)
         db.session.commit()
 
-        # Registrar histórico
+        # Registrar no histórico
         history = History(
             user_id=current_user.id,
             product_id=product.id,
             product_name=product.name,
             action='cadastrado',
-            quantity_change=quantity,
-            notes=f'Produto cadastrado com {quantity} {unit}'
+            quantity_change=quantity
         )
         db.session.add(history)
         db.session.commit()
 
-        flash('Produto cadastrado com sucesso!', 'success')
+        flash(f'"{name}" cadastrado com sucesso!', 'success')
         return redirect(url_for('dashboard.index'))
 
-    # Verificar se código já existe
-    existing = None
-    if barcode:
-        existing = Product.query.filter_by(user_id=current_user.id, barcode=barcode).first()
-
-    categories = Category.query.filter(
-        (Category.user_id == current_user.id) | (Category.user_id == None)
-    ).all()
-    locations = StorageLocation.query.filter_by(user_id=current_user.id).all()
-
-    return render_template('product_form.html', 
-        barcode=barcode, 
-        existing=existing,
+    return render_template('product_form.html',
+        barcode=barcode,
+        existing=None,
         categories=categories,
-        locations=locations,
-        product=None
+        locations=locations
     )
 
-@bp.route('/<int:id>')
-@login_required
-def detail(id):
-    product = Product.query.filter_by(id=id, user_id=current_user.id).first_or_404()
-    history = History.query.filter_by(product_id=id, user_id=current_user.id).order_by(History.created_at.desc()).all()
-    return render_template('product_detail.html', product=product, history=history)
 
-@bp.route('/<int:id>/edit', methods=['GET', 'POST'])
+@bp.route('/produtos/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def edit(id):
     product = Product.query.filter_by(id=id, user_id=current_user.id).first_or_404()
 
+    categories = Category.query.filter(
+        (Category.user_id == current_user.id) | (Category.user_id == None)
+    ).all()
+
+    locations = Location.query.filter(
+        (Location.user_id == current_user.id) | (Location.user_id == None)
+    ).all()
+
     if request.method == 'POST':
+        old_name = product.name
         product.name = request.form.get('name', '').strip()
         product.brand = request.form.get('brand', '').strip() or None
-        product.category_id = request.form.get('category_id', type=int)
         product.barcode = request.form.get('barcode', '').strip() or None
-
-        try:
-            product.quantity = float(request.form.get('quantity', '1').replace(',', '.'))
-        except:
-            pass
-
+        product.category_id = request.form.get('category_id', type=int) or None
+        product.storage_location_id = request.form.get('location_id', type=int) or None
+        product.quantity = request.form.get('quantity', type=float, default=1)
         product.unit = request.form.get('unit', 'unidade')
+        product.no_expiration = bool(request.form.get('no_expiration'))
+        product.notes = request.form.get('notes', '').strip() or None
 
-        expiration_str = request.form.get('expiration_date', '').strip()
-        product.no_expiration = request.form.get('no_expiration') == 'on'
-
-        if not product.no_expiration and expiration_str:
-            try:
-                product.expiration_date = datetime.strptime(expiration_str, '%d/%m/%Y').date()
-            except ValueError:
-                flash('Data de validade inválida.', 'warning')
-                return redirect(url_for('products.edit', id=id))
+        if not product.no_expiration:
+            date_str = request.form.get('expiration_date', '')
+            if date_str:
+                try:
+                    product.expiration_date = datetime.strptime(date_str, '%d/%m/%Y').date()
+                except ValueError:
+                    flash('Data de validade inválida.', 'danger')
+                    return redirect(url_for('products.edit', id=id))
+            else:
+                product.expiration_date = None
         else:
             product.expiration_date = None
-
-        product.storage_location_id = request.form.get('location_id', type=int)
-        product.notes = request.form.get('notes', '').strip() or None
-        product.updated_at = datetime.now(pytz.timezone('America/Sao_Paulo'))
 
         db.session.commit()
 
@@ -204,60 +218,32 @@ def edit(id):
             user_id=current_user.id,
             product_id=product.id,
             product_name=product.name,
-            action='editado',
-            notes='Produto editado'
+            action='editado'
         )
         db.session.add(history)
         db.session.commit()
 
-        flash('Produto atualizado!', 'success')
+        flash(f'"{product.name}" atualizado com sucesso!', 'success')
         return redirect(url_for('products.detail', id=id))
 
-    categories = Category.query.filter(
-        (Category.user_id == current_user.id) | (Category.user_id == None)
-    ).all()
-    locations = StorageLocation.query.filter_by(user_id=current_user.id).all()
-
-    return render_template('product_form.html', 
+    return render_template('product_form.html',
         product=product,
         categories=categories,
-        locations=locations,
-        barcode=product.barcode,
-        existing=None
+        locations=locations
     )
 
-@bp.route('/<int:id>/delete', methods=['POST'])
-@login_required
-def delete(id):
-    product = Product.query.filter_by(id=id, user_id=current_user.id).first_or_404()
-    product.active = False
-    db.session.commit()
 
-    history = History(
-        user_id=current_user.id,
-        product_id=product.id,
-        product_name=product.name,
-        action='excluido',
-        notes='Produto excluído'
-    )
-    db.session.add(history)
-    db.session.commit()
-
-    flash('Produto removido.', 'info')
-    return redirect(url_for('dashboard.index'))
-
-@bp.route('/<int:id>/consume', methods=['POST'])
+@bp.route('/produtos/<int:id>/consumir', methods=['POST'])
 @login_required
 def consume(id):
     product = Product.query.filter_by(id=id, user_id=current_user.id).first_or_404()
+    amount = request.form.get('amount', type=float, default=1)
 
-    try:
-        amount = float(request.form.get('amount', '1').replace(',', '.'))
-    except:
-        amount = 1
+    if product.quantity >= amount:
+        product.quantity -= amount
+        if product.quantity <= 0:
+            product.active = False
 
-    if product.quantity > 0:
-        product.quantity = max(0, product.quantity - amount)
         db.session.commit()
 
         history = History(
@@ -266,28 +252,28 @@ def consume(id):
             product_name=product.name,
             action='consumido',
             quantity_change=-amount,
-            notes=f'Consumido {amount} {product.unit}'
+            notes=f'{amount} {product.unit}'
         )
         db.session.add(history)
         db.session.commit()
 
-        flash(f'Consumido {amount} {product.unit} de {product.name}', 'success')
+        flash(f'Consumido {amount|int} {product.unit} de "{product.name}"', 'success')
     else:
-        flash('Quantidade já está em zero.', 'warning')
+        flash('Quantidade insuficiente em estoque.', 'danger')
 
-    return redirect(request.referrer or url_for('dashboard.index'))
+    return redirect(url_for('products.detail', id=id))
 
-@bp.route('/<int:id>/add-stock', methods=['POST'])
+
+@bp.route('/produtos/<int:id>/estoque', methods=['POST'])
 @login_required
 def add_stock(id):
     product = Product.query.filter_by(id=id, user_id=current_user.id).first_or_404()
-
-    try:
-        amount = float(request.form.get('amount', '1').replace(',', '.'))
-    except:
-        amount = 1
+    amount = request.form.get('amount', type=float, default=1)
 
     product.quantity += amount
+    if not product.active:
+        product.active = True
+
     db.session.commit()
 
     history = History(
@@ -296,10 +282,31 @@ def add_stock(id):
         product_name=product.name,
         action='estoque_adicionado',
         quantity_change=amount,
-        notes=f'Adicionado {amount} {product.unit} ao estoque'
+        notes=f'{amount} {product.unit}'
     )
     db.session.add(history)
     db.session.commit()
 
-    flash(f'Adicionado {amount} {product.unit} ao estoque de {product.name}', 'success')
-    return redirect(request.referrer or url_for('dashboard.index'))
+    flash(f'Adicionado {amount|int} {product.unit} de "{product.name}"', 'success')
+    return redirect(url_for('products.detail', id=id))
+
+
+@bp.route('/produtos/<int:id>/excluir', methods=['POST'])
+@login_required
+def delete(id):
+    product = Product.query.filter_by(id=id, user_id=current_user.id).first_or_404()
+
+    history = History(
+        user_id=current_user.id,
+        product_id=product.id,
+        product_name=product.name,
+        action='excluido',
+        quantity_change=-product.quantity
+    )
+    db.session.add(history)
+
+    product.active = False
+    db.session.commit()
+
+    flash(f'"{product.name}" removido com sucesso.', 'success')
+    return redirect(url_for('products.list_products'))

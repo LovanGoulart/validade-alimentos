@@ -27,13 +27,14 @@ def index():
         if p.no_expiration or not p.expiration_date:
             continue
         days = (p.expiration_date - today).days
+
         if days < 0:
             vencidos += 1
-        elif days == 0:
+        if days == 0:
             vence_hoje += 1
-        elif days <= 7:
+        if 0 <= days <= 7:
             vence_7 += 1
-        elif days <= 30:
+        if 0 <= days <= 30:
             vence_30 += 1
 
         if days <= 7 and days >= 0:
@@ -50,7 +51,7 @@ def index():
     recent_history = History.query.filter_by(user_id=current_user.id).order_by(History.created_at.desc()).limit(10).all()
 
     return render_template('dashboard.html',
-        now=datetime.now(tz),        # <-- ADICIONADO: data atual com timezone BR
+        now=datetime.now(tz),
         total=total,
         vencidos=vencidos,
         vence_hoje=vence_hoje,
