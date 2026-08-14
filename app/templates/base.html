@@ -50,31 +50,37 @@
 
         {% if current_user.is_authenticated %}
         <nav class="bottom-nav" aria-label="Navegação principal">
+            <!-- 1. Início -->
             <a href="{{ url_for('dashboard.index') }}" class="nav-item {% if request.endpoint == 'dashboard.index' %}active{% endif %}" aria-label="Início">
                 <span class="nav-icon">🏠</span>
                 <span class="nav-label">Início</span>
             </a>
-            <a href="{{ url_for('products.list_products') }}" class="nav-item {% if request.endpoint and 'products' in request.endpoint %}active{% endif %}" aria-label="Produtos">
-                <span class="nav-icon">📦</span>
-                <span class="nav-label">Produtos</span>
-            </a>
-            <a href="{{ url_for('products.new_product') }}" class="nav-item nav-scan {% if request.endpoint and 'new_product' in request.endpoint %}active{% endif %}" aria-label="Escanear">
-                <span class="nav-icon">📷</span>
-                <span class="nav-label">Scan</span>
-            </a>
-            <a href="{{ url_for('notifications.index') }}" class="nav-item {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}" aria-label="Alertas">
-                <span class="nav-icon">⚠️</span>
-                <span class="nav-label">Alertas</span>
-            </a>
+            <!-- 2. Configurações -->
             <a href="{{ url_for('notifications.settings') }}" class="nav-item {% if request.endpoint and 'settings' in request.endpoint %}active{% endif %}" aria-label="Configurações">
                 <span class="nav-icon">⚙️</span>
                 <span class="nav-label">Config</span>
             </a>
+            <!-- 3. Scan (destaque) -->
+            <a href="{{ url_for('products.new_product') }}" class="nav-item nav-scan {% if request.endpoint and 'new_product' in request.endpoint %}active{% endif %}" aria-label="Escanear">
+                <span class="nav-icon">+</span>
+                <span class="nav-label"></span>
+            </a>
+            <!-- 4. Alertas -->
+            <a href="{{ url_for('notifications.index') }}" class="nav-item {% if request.endpoint and 'notifications' in request.endpoint %}active{% endif %}" aria-label="Alertas">
+                <span class="nav-icon">⚠️</span>
+                <span class="nav-label">Alertas</span>
+            </a>
+            <!-- 5. Produtos -->
+            <a href="{{ url_for('products.list_products') }}" class="nav-item {% if request.endpoint and 'products' in request.endpoint %}active{% endif %}" aria-label="Produtos">
+                <span class="nav-icon">📦</span>
+                <span class="nav-label">Produtos</span>
+            </a>
         </nav>
 
-        <a href="{{ url_for('products.new_product') }}" class="fab" aria-label="Adicionar alimento">
-            <span>+</span>
-        </a>
+        <!-- FAB agora é botão "Voltar ao topo" -->
+        <button type="button" class="fab" id="fab-scroll-top" aria-label="Voltar ao topo">
+            <span>▲</span>
+        </button>
         {% endif %}
     </div>
 
@@ -84,11 +90,35 @@
     {% block extra_js %}{% endblock %}
 
     <script>
+        // Registrar Service Worker
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('{{ url_for("static", filename="service-worker.js") }}')
                 .then(reg => console.log('SW registrado'))
                 .catch(err => console.log('SW erro:', err));
         }
+
+        // FAB: Voltar ao topo
+        document.addEventListener('DOMContentLoaded', function() {
+            const fabScrollTop = document.getElementById('fab-scroll-top');
+            if (fabScrollTop) {
+                // Mostrar/esconder FAB conforme scroll
+                window.addEventListener('scroll', function() {
+                    if (window.scrollY > 200) {
+                        fabScrollTop.classList.add('visible');
+                    } else {
+                        fabScrollTop.classList.remove('visible');
+                    }
+                });
+
+                // Ação de scroll ao topo
+                fabScrollTop.addEventListener('click', function() {
+                    window.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                    });
+                });
+            }
+        });
     </script>
 </body>
 </html>

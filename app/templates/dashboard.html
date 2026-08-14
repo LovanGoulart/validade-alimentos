@@ -6,7 +6,7 @@
 <div class="dashboard">
     <div class="dashboard-header">
         <h2>Olá, {{ current_user.name.split()[0] }}! 👋</h2>
-        <p class="dashboard-date">{{ current_user.created_at.strftime('%d/%m/%Y') }}</p>
+        <p class="dashboard-date">📅 {{ now.strftime('%d/%m/%Y') }}</p>
     </div>
 
     <div class="stats-grid">

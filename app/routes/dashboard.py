@@ -50,6 +50,7 @@ def index():
     recent_history = History.query.filter_by(user_id=current_user.id).order_by(History.created_at.desc()).limit(10).all()
 
     return render_template('dashboard.html',
+        now=datetime.now(tz),        # <-- ADICIONADO: data atual com timezone BR
         total=total,
         vencidos=vencidos,
         vence_hoje=vence_hoje,
